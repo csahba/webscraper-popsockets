@@ -1,5 +1,4 @@
-from asyncio import wait_for
-from dis import show_code
+from tabnanny import check
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -11,6 +10,7 @@ class Scraper():
 
     def __init__(self):
         self.driver = webdriver.Chrome()
+        self.driver.set_window_size(1920, 1080)
 
     def get(self, url):
         self.driver.get(url)
@@ -36,22 +36,51 @@ class Scraper():
         except TimeoutException:
             print("Element not yet there")
     
-    def get_links(self):
+    def get_product_links(self):
         '''
         first pass/crawl to retrieve a list of products by crawling through product list pages by category
         this category data is unretrieveable from the individual product pages so much be compiled from 'collection' pages
         '''
-        pass
+        for url in self.category_list:
+            self.get(url)
+            self.show_more()
+
+    def get_category_links(self):
+        '''
+        get list of category urls, used for crawling to get product urls
+        '''
+        navbar = self.wait_for_element((By.XPATH,'//ul[contains(@class,"navbar-nav")]'),10)
+        categories = navbar.find_elements(By.XPATH, './li[contains(@class, "nav-item-cat")]/a')
+        unchecked_category_urls = [x.get_attribute('href') for x in categories]
+        category_urls = []
+        while True:
+            if not unchecked_category_urls:
+                break
+            url = unchecked_category_urls.pop()
+            if url in category_urls:
+                continue
+            category_urls.append(url)
+            try:
+                self.get(url)
+                refinement_slider = self.wait_for_element((By.XPATH,'//div[@class="refinement-container"]'),10)
+                refinement_category_urls = [x.get_attribute('href') for x in refinement_slider.find_elements(By.XPATH, './/div[contains(@class,"tns-inner")]//a')]
+                unchecked_category_urls.extend(refinement_category_urls)
+            except Exception:
+                pass
+        self.category_list = category_urls
+        return self.category_list
+
 
     def show_more(self):
         '''
-        general method to scroll down and populate more products on catalogue/collection page, should fail gracefully if page is fully populated
+        general method to scroll down and populate more products on catalogue/coselfllection page, should fail gracefully if page is fully populated
         '''
         while True:
             try:
-                more_button = self.wait_for_element((By.XPATH,'//div[@class="show-more"]//button'), 20)
+                more_button = self.wait_for_element((By.XPATH,'//div[@class="show-more"]//button'), 10)
                 more_button.click()
-            except Exception:
+                sleep(1)
+            except AttributeError:
                 print('Element cannot be clicked')
                 break
 
@@ -66,7 +95,9 @@ if __name__ == '__main__':
     pop_scraper = Scraper()
     pop_scraper.get('https://www.popsockets.co.uk/')
     pop_scraper.accept_cookies()
-    #pop_scraper.decline_voucher()
-    pop_scraper.get('https://www.popsockets.co.uk/en-gb/search?cgid=root')
-    pop_scraper.show_more()
+    pop_scraper.decline_voucher()
+    pop_scraper.get_category_links()
+    pop_scraper.get_product_links()
+    #pop_scraper.get('https://www.popsockets.co.uk/en-gb/grips/premium')
+    #pop_scraper.show_more()
 
